@@ -16,7 +16,8 @@ pub use diff::{
   VersionChange,
   VersionDiff,
 };
-mod render;
+#[cfg(feature = "print")] mod render;
+#[cfg(feature = "print")]
 pub use render::{
   RenderOptions,
   write_diff_report,
@@ -44,6 +45,14 @@ pub use snapshot::{
 /// not need to depend on a matching version of the `size` crate.
 pub use size::Size;
 #[cfg(feature = "store")] pub use store::Store;
+#[cfg(feature = "store")] mod paths;
+#[cfg(feature = "store")] pub use paths::diff_paths;
+#[cfg(feature = "print")] mod print;
+#[cfg(feature = "print")]
+pub use print::{
+  display_diff,
+  print_diff,
+};
 
 /// A validated store path of the form `/nix/store/<hash>-<name>`.
 ///

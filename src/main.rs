@@ -1,14 +1,11 @@
 use std::{
-  cell::LazyCell,
   env,
   fmt::{
     self,
     Write as _,
   },
-  fs,
   io::{
     self,
-    BufRead as _,
     IsTerminal as _,
     Write as _,
   },
@@ -23,16 +20,13 @@ use std::{
 use dix::{
   DiffReport,
   RenderOptions,
-  SnapshotDocument,
   json,
 };
-use misstep::ResultExt as _;
 use pound::{
   Parse,
   ValueEnum,
 };
 use size::Size;
-use yansi::Paint as _;
 
 mod generations;
 use generations::{
@@ -253,7 +247,7 @@ fn run(command: Command) -> misstep::Result<ExitCode> {
       render,
       status,
     } => {
-      let report = diff_paths(&old_path, &new_path)?;
+      let report = dix::diff_paths(&old_path, &new_path)?;
       if !status.quiet {
         print_diff(&old_path, &new_path, &report, output, render.into())?;
       }
@@ -310,23 +304,6 @@ fn print_snapshot(path: &Path) -> misstep::Result<()> {
   Ok(())
 }
 
-/// Diffs `old_path` and `new_path`, each a store path or snapshot file.
-///
-/// # Returns
-///
-/// The diff from `old_path` to `new_path`.
-///
-/// # Errors
-///
-/// Returns an error if a path cannot be loaded as a store path or snapshot.
-fn diff_paths(old_path: &Path, new_path: &Path) -> misstep::Result<DiffReport> {
-  // Only opened if an argument is not a snapshot file.
-  let store: LazyCell<dix::Store> = LazyCell::new(dix::Store::open);
-  let old = load_snapshot(old_path, &store)?;
-  let new = load_snapshot(new_path, &store)?;
-  Ok(dix::diff_store_snapshots(&old.snapshot, &new.snapshot))
-}
-
 /// Prints `report`, the diff between `old_path` and `new_path`, to stdout.
 ///
 /// # Returns
@@ -344,11 +321,7 @@ fn print_diff(
   options: RenderOptions,
 ) -> misstep::Result<()> {
   match output {
-    OutputFormat::Human => {
-      let hidden = display_diff(old_path, new_path, report, options)?;
-      dix::write_hidden_note(&mut io::stdout().lock(), hidden, "--full")?;
-      Ok(())
-    },
+    OutputFormat::Human => dix::print_diff(old_path, new_path, report, options),
     OutputFormat::Json => {
       Ok(serde_json::to_writer(
         io::stdout(),
@@ -356,41 +329,6 @@ fn print_diff(
       )?)
     },
   }
-}
-
-/// Reads the snapshot in `path` if it is a JSON file, and queries the store
-/// path `path` resolves to in `store` otherwise.
-///
-/// # Returns
-///
-/// The snapshot read from, or queried for, `path`.
-///
-/// # Errors
-///
-/// Returns an error if `path` is a JSON file that is not a valid snapshot, or
-/// the store cannot be queried.
-fn load_snapshot(
-  path: &Path,
-  store: &LazyCell<dix::Store>,
-) -> misstep::Result<SnapshotDocument> {
-  if !is_json_file(path)? {
-    return store.query_snapshot_document(path);
-  }
-
-  tracing::debug!(path = %path.display(), "reading snapshot");
-  let input = fs::read_to_string(path)?;
-  SnapshotDocument::from_json(&input)
-    .with_context(|| format!("failed to read snapshot '{}'", path.display()))
-}
-
-/// Checks whether `path` is a file holding a JSON object, by its first
-/// non-whitespace byte.
-fn is_json_file(path: &Path) -> io::Result<bool> {
-  if !path.is_file() {
-    return Ok(false);
-  }
-  let mut reader = io::BufReader::new(fs::File::open(path)?);
-  Ok(reader.fill_buf()?.trim_ascii_start().starts_with(b"{"))
 }
 
 /// One transition in the array printed by `dix last --output json`.
@@ -465,7 +403,7 @@ fn print_last(
           old.number,
           new.number
         )?;
-        hidden += display_diff(&old.path, &new.path, report, options)?;
+        hidden += dix::display_diff(&old.path, &new.path, report, options)?;
       }
       dix::write_hidden_note(&mut io::stdout().lock(), hidden, "--full")?;
       Ok(())
@@ -485,50 +423,6 @@ fn print_last(
       Ok(serde_json::to_writer(io::stdout(), &transitions)?)
     },
   }
-}
-
-/// Renders `report`, the diff between `old_path` and `new_path`, for humans to
-/// stdout.
-///
-/// # Returns
-///
-/// The number of package diffs hidden by `options`.
-///
-/// # Errors
-///
-/// Returns an error if the output cannot be written.
-fn display_diff(
-  old_path: &Path,
-  new_path: &Path,
-  report: &DiffReport,
-  options: RenderOptions,
-) -> misstep::Result<usize> {
-  let mut out = WriteFmt(io::stdout());
-
-  tracing::info!("rendering diff report");
-
-  writeln!(
-    out,
-    "{arrows} {old}",
-    arrows = "<<<".bold(),
-    old = fs::canonicalize(old_path)
-      .unwrap_or_else(|_| old_path.to_path_buf())
-      .display(),
-  )?;
-  writeln!(
-    out,
-    "{arrows} {new}",
-    arrows = ">>>".bold(),
-    new = fs::canonicalize(new_path)
-      .unwrap_or_else(|_| new_path.to_path_buf())
-      .display(),
-  )?;
-
-  let hidden = dix::write_diff_report(&mut out, report, options)?;
-
-  tracing::info!("diff report rendered");
-
-  Ok(hidden)
 }
 
 // https://bixense.com/clicolors/

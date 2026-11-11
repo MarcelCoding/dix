@@ -2,7 +2,6 @@
 name         = "dix"
 version      = "3.0.0"
 edition      = "2024"
-rust-version = "1.97.0"
 description  = "Diff Nix"
 readme       = "README.md"
 homepage     = "https://github.com/manic-systems/dix"
@@ -13,7 +12,7 @@ categories   = [ "command-line-utilities" ]
 include      = [ "CHANGELOG.md", "Cargo.lock", "Cargo.toml", "LICENSE.md", "README.md", "src/**" ]
 
 [dependencies]
-diff       = "0.1.13"
+diff       = { optional = true, version = "0.1.13" }
 misstep    = { features = [ "color", "pretty" ], version = "0.4.1" }
 pound      = { optional = true, version = "0.6.1" }
 rusqlite   = { default-features = false, features = [ "cache" ], optional = true, version = "0.41.0" }
@@ -21,7 +20,7 @@ serde      = { features = [ "derive" ], version = "1.0.228" }
 serde_json = "1.0.149"
 size       = "0.6.0"
 tracing    = { default-features = false, features = [ "std" ], version = "0.1" }
-yansi      = { features = [ "detect-env", "detect-tty" ], version = "1.0.1" }
+yansi      = { features = [ "detect-env", "detect-tty" ], optional = true, version = "1.0.1" }
 
 [dependencies.tracing-subscriber]
 default-features = false
@@ -30,8 +29,9 @@ optional         = true
 version          = "0.3"
 
 [features]
-cli     = [ "dep:pound", "dep:tracing-subscriber", "store" ]
+cli     = [ "dep:pound", "dep:tracing-subscriber", "print", "store" ]
 default = [ "cli", "store" ]
+print   = [ "dep:diff", "dep:yansi" ]
 store   = [ "dep:rusqlite" ]
 
 [[bin]]
